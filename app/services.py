@@ -9,6 +9,9 @@ import requests
 from faster_whisper import WhisperModel
 
 ALLOWED_HOSTS = {"instagram.com", "www.instagram.com"}
+DEFAULT_INSTAGRAM_RESOLVER_URL = (
+    "https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items"
+)
 SUPPORTED_MEDIA_KEYS = [
     "media_url",
     "video_url",
@@ -56,12 +59,17 @@ def transcribe_instagram_url(url: str, language: str = "pt") -> dict[str, Any]:
 
 
 def resolve_media_url(instagram_url: str) -> str:
-    resolver_url = os.getenv("INSTAGRAM_RESOLVER_URL", "").strip()
+    resolver_url = get_resolver_url()
     resolver_token = os.getenv("INSTAGRAM_RESOLVER_TOKEN", "").strip()
-    resolver_auth_header = os.getenv("INSTAGRAM_RESOLVER_AUTH_HEADER", "Authorization").strip() or "Authorization"
+    resolver_auth_header = (
+        os.getenv("INSTAGRAM_RESOLVER_AUTH_HEADER", "Authorization").strip() or "Authorization"
+    )
 
-    if not resolver_url:
-        raise RuntimeError("INSTAGRAM_RESOLVER_URL não configurada.")
+    if is_apify_resolver(resolver_url) and not resolver_token:
+        raise RuntimeError(
+            "INSTAGRAM_RESOLVER_TOKEN não configurada. "
+            "No Vercel, adicione a variável de ambiente com o valor Bearer apify_api_xxxxx."
+        )
 
     headers = {"Accept": "application/json"}
     if resolver_token:
@@ -86,12 +94,23 @@ def resolve_media_url(instagram_url: str) -> str:
     return media_url
 
 
-def build_resolver_payload(resolver_url: str, instagram_url: str) -> dict[str, Any]:
-    parsed = urlparse(resolver_url)
-    host = parsed.netloc.lower()
-    path = parsed.path.lower()
+def get_resolver_url() -> str:
+    return (
+        os.getenv("INSTAGRAM_RESOLVER_URL", DEFAULT_INSTAGRAM_RESOLVER_URL).strip()
+        or DEFAULT_INSTAGRAM_RESOLVER_URL
+    )
 
-    if "api.apify.com" in host and "/acts/apify~instagram-scraper/" in path:
+
+def is_apify_resolver(resolver_url: str) -> bool:
+    parsed = urlparse(resolver_url)
+    return (
+        "api.apify.com" in parsed.netloc.lower()
+        and "/acts/apify~instagram-scraper/" in parsed.path.lower()
+    )
+
+
+def build_resolver_payload(resolver_url: str, instagram_url: str) -> dict[str, Any]:
+    if is_apify_resolver(resolver_url):
         return {
             "directUrls": [instagram_url],
             "resultsType": "reels",

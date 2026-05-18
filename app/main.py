@@ -1,10 +1,12 @@
 import os
+from urllib.parse import urlparse
+
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .services import transcribe_instagram_url, validate_instagram_url
+from .services import get_resolver_url, transcribe_instagram_url, validate_instagram_url
 
 app = FastAPI(title="Instagram Reel Transcriber")
 
@@ -24,10 +26,15 @@ def home(request: Request):
 
 @app.get("/health")
 def health():
+    resolver_url_configured = bool(os.getenv("INSTAGRAM_RESOLVER_URL"))
+    resolver_host = urlparse(get_resolver_url()).netloc or "invalid"
     return {
         "ok": True,
-        "has_resolver_url": bool(os.getenv("INSTAGRAM_RESOLVER_URL")),
+        "resolver_url_configured": resolver_url_configured,
+        "resolver_url_source": "environment" if resolver_url_configured else "default_apify",
+        "has_resolver_token": bool(os.getenv("INSTAGRAM_RESOLVER_TOKEN")),
         "whisper_model_size": os.getenv("WHISPER_MODEL_SIZE", "tiny"),
+        "resolver_host": resolver_host,
     }
 
 
